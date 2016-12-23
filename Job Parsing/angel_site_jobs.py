@@ -2,6 +2,7 @@ import random
 import re
 import urllib2
 import requests
+from datetime import datetime
 from bs4 import BeautifulSoup
 from pymongo import MongoClient
 
@@ -70,7 +71,7 @@ class AngelListScraping:
         return check
 
     def is_inserted(self,job_link):
-        check = db.collections.find({"jobURL":job_link}).count()>0
+        check = db.jobCollections.find({"jobURL":job_link}).count()>0
         return check
         
     def  insert_db(self,company_name,company_link,job_titles,job_links,location,timing,skills,min_salary,max_salary,db):
@@ -82,22 +83,22 @@ class AngelListScraping:
             skills[count] = skills[count].replace("\n","")
             if not skills[count] == "-":
                 skills[count] = skills[count].split(", ");
-            if  "Bengaluru" in location[count]:
-                result = db.jobCollections.insert_one(
-                {
-                    "_id" : _id,
-                    "companyName" : company_name,
-                    "companyLink" : company_link,
-                    "jobTitle" : job,
-                    "jobURL" : job_links[count],
-                    "jobLocation" : location[count],
-                    "jobTiming" : timing[count],
-                    "jobSkills" : skills[count],
-                    "minSalary" : min_salary[count],
-                    "maxSalary" : max_salary[count]
-                    }
-                )
-                print "inserted"
+            result = db.jobCollections.insert_one(
+            {
+                "_id" : _id,
+                "companyName" : company_name,
+                "companyLink" : company_link,
+                "jobTitle" : job,
+                "jobURL" : job_links[count],
+                "jobLocation" : location[count],
+                "jobTiming" : timing[count],
+                "jobSkills" : skills[count],
+                "minSalary" : min_salary[count],
+                "maxSalary" : max_salary[count],
+                "createdTime" : datetime.utcnow() 
+                }
+            )
+            print "inserted"
             count = count + 1
             
     def get_job_page(self,job_link):
@@ -139,7 +140,8 @@ class AngelListScraping:
         salary_tag = job_listing_metadata.find_all('div',attrs={'class':'s-vgBottom2'})
         for salary_name in salary_name_tag:
             if salary_name.text == 'Compensation':
-                salary_range = salary_tag[count].text
+                if "No Salary" not in salary_tag[count].text:
+                    salary_range = salary_tag[count].text
             count = count + 1
         print salary_range
         return salary_range
@@ -154,9 +156,9 @@ class AngelListScraping:
         max_salary = []
         min_max_list = []
         skills = []
-        job_count = 0
-        for id in job_ids:
-                job_listing_url = job_listing_url + str(id)
+        incr = 0
+        for each_id in job_ids:
+                job_listing_url = job_listing_url + str(each_id)
                 print job_listing_url
                 company_page = request.get(job_listing_url,headers=headers)
                 company_soup = BeautifulSoup(company_page.text,"html.parser")
@@ -164,7 +166,9 @@ class AngelListScraping:
                 company_link = self.get_company_link(company_soup)
                 job_titles = self.get_job_title(company_soup)        
                 job_links = self.get_job_links(company_soup)
-                for incr in range(len(job_titles)):
+                while incr<len(job_titles):
+                    print job_links[incr]
+                    print self.is_inserted(job_links[incr])
                     if not self.is_inserted(job_links[incr]):
                         job_page = self.get_job_page(job_links[incr])
                         job_soup = BeautifulSoup(job_page.text,"html.parser")
@@ -180,12 +184,16 @@ class AngelListScraping:
                             min_salary.insert(incr,minsalary)
                             max_salary.insert(incr,maxsalary)
                         else:
-                            skills.insert(incr,"-")
                             min_salary.insert(incr,"-")
                             max_salary.insert(incr,"-")
+                        incr += 1
                     else:
+                        print incr
+                        job_links.pop(incr)
+                        job_titles.pop(incr)
                         continue
-                self.insert_db(company_name,company_link,job_titles,job_links,location,timing,skills,min_salary,max_salary,db)
+                if job_links:
+                    self.insert_db(company_name,company_link,job_titles,job_links,location,timing,skills,min_salary,max_salary,db)
                 break
                     
 request = requests.session()
@@ -195,7 +203,7 @@ headers = {"Content-Type":"application/x-www-form-urlencoded","Host":"angel.co",
 scrap = AngelListScraping(request,login_url,headers)
 login_response = scrap.get_login_page()
 print login_response.url
-job_search_url = "https://angel.co/jobs#find/f!%7B%22locations%22%3A%5B%221904-Bengaluru%2C%20KA%22%5D%7D"
+job_search_url = "https://angel.co/jobs"
 job_id = scrap.get_job_ids(job_search_url)
 job_id =  list(eval(job_id))
 job_listing_url = "https://angel.co/job_listings/browse_startups_table?startup_ids[]="
