@@ -74,32 +74,30 @@ class AngelListScraping:
         check = db.jobCollections.find({"jobURL":job_link}).count()>0
         return check
         
-    def  insert_db(self,company_name,company_link,job_titles,job_links,location,timing,skills,min_salary,max_salary,db):
-        count = 0
-        for job in  job_titles:
+    def  insert_db(self,company_name,company_link,job_title,job_link,location,timing,skills,min_salary,max_salary,currency_type,db):
+        _id = self.generate_id()
+        while self.is_id_available(_id,db):
             _id = self.generate_id()
-            while self.is_id_available(_id,db):
-                _id = self.generate_id()
-            skills[count] = skills[count].replace("\n","")
-            if not skills[count] == "-":
-                skills[count] = skills[count].split(", ");
-            result = db.jobCollections.insert_one(
-            {
-                "_id" : _id,
-                "companyName" : company_name,
-                "companyLink" : company_link,
-                "jobTitle" : job,
-                "jobURL" : job_links[count],
-                "jobLocation" : location[count],
-                "jobTiming" : timing[count],
-                "jobSkills" : skills[count],
-                "minSalary" : min_salary[count],
-                "maxSalary" : max_salary[count],
-                "createdTime" : datetime.utcnow() 
-                }
-            )
-            print "inserted"
-            count = count + 1
+        skills = skills.replace("\n","")
+        if not skills == "-":
+            skills = skills.split(", ");
+        result = db.jobCollections.insert_one(
+        {
+            "_id" : _id,
+            "companyName" : company_name,
+            "companyLink" : company_link,
+            "jobTitle" : job_title,
+            "jobURL" : job_link,
+            "jobLocation" : location,
+            "jobType" : timing,
+            "jobSkills" : skills,
+            "minSalary" : min_salary,
+            "maxSalary" : max_salary,
+            "currencyType" : currency_type,
+            "createdTime" : datetime.utcnow() 
+            }
+        )
+        print "inserted"
             
     def get_job_page(self,job_link):
         job_page = request.get(job_link,headers=headers)
@@ -148,56 +146,53 @@ class AngelListScraping:
         
                 
     def get_company_details(self,job_listing_url,job_ids,db):
-        job_titles = []
-        job_links = []
-        location = []
-        timing = []
-        min_salary = []
-        max_salary = []
-        min_max_list = []
-        skills = []
-        incr = 0
+        count = 0
         for each_id in job_ids:
-                job_listing_url = job_listing_url + str(each_id)
-                print job_listing_url
-                company_page = request.get(job_listing_url,headers=headers)
+                job_titles = []
+                job_links = []
+                min_max_list = []
+                job_url = job_listing_url + str(each_id)
+                print job_url
+                company_page = request.get(job_url,headers=headers)
                 company_soup = BeautifulSoup(company_page.text,"html.parser")
                 company_name = self.get_company_name(company_soup)
                 company_link = self.get_company_link(company_soup)
                 job_titles = self.get_job_title(company_soup)        
                 job_links = self.get_job_links(company_soup)
-                while incr<len(job_titles):
+                for incr in range(len(job_titles)):
                     print job_links[incr]
                     print self.is_inserted(job_links[incr])
                     if not self.is_inserted(job_links[incr]):
                         job_page = self.get_job_page(job_links[incr])
                         job_soup = BeautifulSoup(job_page.text,"html.parser")
-                        location.insert(incr,self.get_location(job_soup))
-                        timing.insert(incr,self.get_timing(job_soup))
-                        skills.insert(incr,self.get_skill(job_soup))
+                        location = self.get_location(job_soup)
+                        timing = self.get_timing(job_soup)
+                        skills = self.get_skill(job_soup)
                         salary_range = self.get_salary_range(job_soup)
                         min_max_list = map(int,re.findall('\d+',salary_range))
                         print min_max_list
                         if min_max_list:
                             minsalary = min_max_list[0]*1000
                             maxsalary = min_max_list[1]*1000
-                            min_salary.insert(incr,minsalary)
-                            max_salary.insert(incr,maxsalary)
+                            min_salary = minsalary
+                            max_salary = maxsalary
+                            if u'\u20b9' in salary_range:
+                                currency_type = "INR"
+                            else:
+                                currency_type = "Doller"
                         else:
-                            min_salary.insert(incr,"-")
-                            max_salary.insert(incr,"-")
-                        incr += 1
+                            min_salary = "-"
+                            max_salary = "-"
+                            currency_type = "-"
+                        self.insert_db(company_name,company_link,job_titles[incr],job_links[incr],location,timing,skills,min_salary,max_salary,currency_type,db)
+                    count += 1
                     else:
-                        print incr
-                        job_links.pop(incr)
-                        job_titles.pop(incr)
                         continue
-                if job_links:
-                    self.insert_db(company_name,company_link,job_titles,job_links,location,timing,skills,min_salary,max_salary,db)
-                break
+                if count == 5:
+                            break
                     
 request = requests.session()
-login_url = "https://angel.co/login?utm_source=top_nav_home"
+login_url = "https://angel.co/login"
 headers = {"Content-Type":"application/x-www-form-urlencoded","Host":"angel.co","Origin":"https://angel.co"
 ,"User-Agent":"Mozilla/5.0 (Windows NT 6.1; WOW64)AppleWebKit/537.36 (KHTML, like Gecko) Chrome/44.0.2403.157 Safari/537.36"} # Mostly you need to pass the headers . Default headers don't work always.  So be careful here
 scrap = AngelListScraping(request,login_url,headers)
