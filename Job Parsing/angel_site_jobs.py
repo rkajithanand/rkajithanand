@@ -146,7 +146,6 @@ class AngelListScraping:
         
                 
     def get_company_details(self,job_listing_url,job_ids,db):
-        count = 0
         for each_id in job_ids:
                 job_titles = []
                 job_links = []
@@ -185,11 +184,8 @@ class AngelListScraping:
                             max_salary = "-"
                             currency_type = "-"
                         self.insert_db(company_name,company_link,job_titles[incr],job_links[incr],location,timing,skills,min_salary,max_salary,currency_type,db)
-                    count += 1
                     else:
                         continue
-                if count == 5:
-                            break
                     
 request = requests.session()
 login_url = "https://angel.co/login"
